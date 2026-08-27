@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مراجع المطالبات | Claims Pre-Audit</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  /* ===== Auth screens ===== */
+  .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .auth-card{background:#FFFFFF;border:1px solid #E4DFD3;max-width:420px;width:100%;padding:32px 30px;}
+  .auth-card .eyebrow{font-family:"Courier New",monospace;font-size:11px;color:#0E6B63;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+  .auth-card h2{margin:0 0 20px;font-size:20px;color:#0F2333;}
+  .auth-field{margin-bottom:14px;}
+  .auth-field label{display:block;font-size:12.5px;color:#3E5468;margin-bottom:5px;}
+  .auth-field input{
+    width:100%;padding:10px 12px;border:1px solid #E4DFD3;font-size:14px;font-family:inherit;
+    background:#FBFAF7;color:#0F2333;
+  }
+  .auth-field input:focus{outline:none;border-color:#0E6B63;background:#fff;}
+  .auth-btn{
+    width:100%;padding:11px;background:#0F2333;color:#fff;border:none;font-weight:600;
+    font-size:14px;cursor:pointer;margin-top:6px;
+  }
+  .auth-btn:hover{background:#0A4A44;}
+  .auth-btn:disabled{background:#B9C2C9;cursor:not-allowed;}
+  .auth-links{display:flex;justify-content:space-between;margin-top:14px;font-size:12.5px;}
+  .auth-links a{color:#0E6B63;cursor:pointer;text-decoration:none;}
+  .auth-links a:hover{text-decoration:underline;}
+  .auth-msg{font-size:12.5px;margin-top:12px;padding:10px 12px;border-right:3px solid #0E6B63;background:#F0F7F5;color:#0A4A44;display:none;}
+  .auth-msg.err{border-color:#B23A32;background:#FBEEEC;color:#B23A32;}
+  .auth-msg.show{display:block;}
+  .auth-screen{display:none;}
+  .auth-screen.active{display:block;}
+
+  /* ===== Top bar (after login) ===== */
+  .topbar{display:flex;justify-content:space-between;align-items:center;max-width:1180px;margin:0 auto 6px;padding:0 0 4px;}
+  .topbar .who{font-size:12.5px;color:#3E5468;font-family:"Courier New",monospace;}
+  .topbar .who b{color:#0F2333;}
+  .topbar .who .badge{background:#0E6B63;color:#fff;padding:1px 8px;border-radius:2px;font-size:10.5px;margin-right:6px;}
+  .topbar button{background:transparent;border:1px solid #E4DFD3;padding:6px 14px;font-size:12.5px;cursor:pointer;color:#3E5468;}
+  .topbar button:hover{border-color:#B23A32;color:#B23A32;}
+
+  /* ===== Admin panel ===== */
+  .admin-toggle{max-width:1180px;margin:0 auto 16px;}
+  .admin-toggle button{background:transparent;border:1px solid #0F2333;padding:8px 16px;font-size:13px;cursor:pointer;}
+  .admin-toggle button.active{background:#0F2333;color:#fff;}
+  #adminPanel{display:none;max-width:1180px;margin:0 auto 26px;}
+  #adminPanel.show{display:block;}
+  .admin-block{background:#FFFFFF;border:1px solid #E4DFD3;padding:20px;margin-bottom:16px;}
+  .admin-block h3{margin:0 0 12px;font-size:14px;}
+  .admin-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #F0EEE6;font-size:13px;gap:10px;flex-wrap:wrap;}
+  .admin-row:last-child{border-bottom:none;}
+  .admin-row .meta{color:#3E5468;font-size:12px;}
+  .admin-row .btns{display:flex;gap:6px;}
+  .admin-row button{padding:5px 12px;font-size:12px;border:1px solid #E4DFD3;background:#fff;cursor:pointer;}
+  .admin-row button.approve{border-color:#2E7D46;color:#2E7D46;}
+  .admin-row button.approve:hover{background:#2E7D46;color:#fff;}
+  .admin-row button.reject{border-color:#B23A32;color:#B23A32;}
+  .admin-row button.reject:hover{background:#B23A32;color:#fff;}
+  .admin-row .status-tag{font-family:"Courier New",monospace;font-size:11px;padding:2px 8px;background:#EAE6DB;}
+  .admin-empty{font-size:12.5px;color:#3E5468;padding:8px 0;}
+</style>
+<style>
+  :root{
+    --ink:#0F2333;
+    --ink-soft:#3E5468;
+    --paper:#F5F2EC;
+    --panel:#FFFFFF;
+    --line:#E4DFD3;
+    --teal:#0E6B63;
+    --teal-deep:#0A4A44;
+    --amber:#C46A2E;
+    --red:#B23A32;
+    --ok:#2E7D46;
+    --mono: "Courier New", monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI","Tahoma",Arial,sans-serif;}
+  body{padding:28px 20px 80px;}
+  .wrap{max-width:1180px;margin:0 auto;}
+
+  .masthead{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:3px solid var(--ink);padding-bottom:18px;margin-bottom:28px;
+    flex-wrap:wrap;gap:14px;
+  }
+  .masthead h1{font-size:26px;margin:0 0 4px;letter-spacing:.2px;}
+  .masthead .eyebrow{font-family:var(--mono);font-size:12px;color:var(--teal);text-transform:uppercase;letter-spacing:2px;margin-bottom:6px;}
+  .masthead .sub{color:var(--ink-soft);font-size:14px;max-width:520px;}
+  .stamp{
+    font-family:var(--mono);font-size:12px;color:var(--ink-soft);text-align:left;
+    border:1px solid var(--line);padding:8px 12px;background:var(--panel);
+  }
+
+  .panel{background:var(--panel);border:1px solid var(--line);padding:22px;margin-bottom:22px;}
+  .panel h2{font-size:15px;margin:0 0 14px;display:flex;align-items:center;gap:10px;}
+  .panel h2 .num{
+    width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;
+    display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-family:var(--mono);
+  }
+
+  .upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:760px){.upload-grid{grid-template-columns:1fr;}}
+  .dropzone{
+    border:1.5px dashed var(--line);background:#FBFAF7;padding:18px;text-align:center;cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--teal);background:#F0F7F5;}
+  .dropzone input{display:none;}
+  .dropzone .fname{font-family:var(--mono);font-size:12px;color:var(--teal-deep);margin-top:8px;word-break:break-all;}
+  .dropzone .hint{font-size:12px;color:var(--ink-soft);margin-top:4px;}
+  .dropzone .label{font-size:13px;font-weight:600;}
+  .dropzone.ok{border-color:var(--ok);background:#F1F8F2;}
+
+  .btn{
+    font-family:inherit;font-size:14px;font-weight:600;border:none;cursor:pointer;
+    padding:12px 22px;background:var(--ink);color:#fff;transition:background .15s;
+  }
+  .btn:hover{background:var(--teal-deep);}
+  .btn:disabled{background:#B9C2C9;cursor:not-allowed;}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--ink);padding:9px 16px;font-size:13px;}
+  .btn.ghost:hover{background:var(--ink);color:#fff;}
+  .btn.small{padding:7px 14px;font-size:12.5px;}
+
+  .actions{display:flex;justify-content:center;margin:26px 0;}
+
+  .status{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);text-align:center;min-height:18px;margin-top:-10px;margin-bottom:20px;}
+  .status.err{color:var(--red);}
+
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:26px;}
+  @media(max-width:760px){.summary{grid-template-columns:repeat(2,1fr);}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--ink);padding:16px;}
+  .stat.f1{border-top-color:var(--red);}
+  .stat.f2{border-top-color:var(--amber);}
+  .stat.f3{border-top-color:var(--teal);}
+  .stat .n{font-size:30px;font-weight:700;font-family:var(--mono);}
+  .stat .l{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+
+  .tabs{display:flex;gap:2px;margin-bottom:0;border-bottom:2px solid var(--ink);}
+  .tab{
+    padding:11px 20px;font-size:13.5px;font-weight:600;cursor:pointer;background:#EAE6DB;
+    color:var(--ink-soft);border:1px solid var(--line);border-bottom:none;
+  }
+  .tab.active{background:var(--ink);color:#fff;}
+
+  .tabpanel{display:none;background:var(--panel);border:1px solid var(--line);border-top:none;padding:20px;}
+  .tabpanel.active{display:block;}
+  .tabpanel .desc{font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.6;}
+  .tabpanel .desc b{color:var(--ink);}
+
+  .tbl-wrap{overflow:auto;max-height:480px;border:1px solid var(--line);}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;}
+  th{
+    position:sticky;top:0;background:var(--ink);color:#fff;text-align:right;
+    padding:9px 10px;font-weight:600;white-space:nowrap;
+  }
+  td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  tr:nth-child(even) td{background:#FAF8F3;}
+  .empty{padding:40px;text-align:center;color:var(--ink-soft);font-size:13px;}
+
+  .rowcount{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
+
+  footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:40px;font-family:var(--mono);}
+</style>
+</head>
+<body>
+
+<!-- ============ AUTH SCREENS ============ -->
+<div id="authWrap" class="auth-wrap">
+  <div class="auth-card">
+    <div class="eyebrow">Claims Pre-Audit · Access</div>
+
+    <!-- LOGIN -->
+    <div class="auth-screen active" id="screen-login">
+      <h2>تسجيل الدخول</h2>
+      <div class="auth-field"><label>الإيميل</label><input type="email" id="login-email"></div>
+      <div class="auth-field"><label>كلمة المرور</label><input type="password" id="login-password"></div>
+      <button class="auth-btn" id="btn-login">دخول</button>
+      <div class="auth-links">
+        <a data-goto="register">تسجيل حساب جديد</a>
+        <a data-goto="forgot">نسيت كلمة المرور؟</a>
+      </div>
+      <div class="auth-msg" id="msg-login"></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div class="auth-screen" id="screen-register">
+      <h2>تسجيل حساب جديد</h2>
+      <div class="auth-field"><label>الاسم</label><input type="text" id="reg-name"></div>
+      <div class="auth-field"><label>الإيميل</label><input type="email" id="reg-email"></div>
+      <div class="auth-field"><label>كلمة المرور (6 حروف على الأقل)</label><input type="password" id="reg-password"></div>
+      <button class="auth-btn" id="btn-register">إرسال كود التفعيل</button>
+      <div class="auth-links"><a data-goto="login">عندك حساب؟ سجّل دخول</a></div>
+      <div class="auth-msg" id="msg-register"></div>
+    </div>
+
+    <!-- VERIFY EMAIL -->
+    <div class="auth-screen" id="screen-verify">
+      <h2>تفعيل الإيميل</h2>
+      <div class="auth-field"><label>الإيميل</label><input type="email" id="verify-email"></div>
+      <div class="auth-field"><label>الكود اللي وصلك</label><input type="text" id="verify-code"></div>
+      <button class="auth-btn" id="btn-verify">تفعيل</button>
+      <div class="auth-links"><a data-goto="login">رجوع لتسجيل الدخول</a></div>
+      <div class="auth-msg" id="msg-verify"></div>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div class="auth-screen" id="screen-forgot">
+      <h2>نسيت كلمة المرور</h2>
+      <div class="auth-field"><label>الإيميل</label><input type="email" id="forgot-email"></div>
+      <button class="auth-btn" id="btn-forgot">إرسال كود إعادة التعيين</button>
+      <div class="auth-links"><a data-goto="reset">عندي الكود بالفعل</a><a data-goto="login">رجوع</a></div>
+      <div class="auth-msg" id="msg-forgot"></div>
+    </div>
+
+    <!-- RESET PASSWORD -->
+    <div class="auth-screen" id="screen-reset">
+      <h2>إعادة تعيين كلمة المرور</h2>
+      <div class="auth-field"><label>الإيميل</label><input type="email" id="reset-email"></div>
+      <div class="auth-field"><label>الكود</label><input type="text" id="reset-code"></div>
+      <div class="auth-field"><label>كلمة المرور الجديدة</label><input type="password" id="reset-password"></div>
+      <button class="auth-btn" id="btn-reset">تغيير كلمة المرور</button>
+      <div class="auth-links"><a data-goto="login">رجوع لتسجيل الدخول</a></div>
+      <div class="auth-msg" id="msg-reset"></div>
+    </div>
+
+    <!-- FIRST ADMIN SETUP (one-time) -->
+    <div class="auth-screen" id="screen-setup">
+      <h2>إعداد أول حساب أدمن (مرة واحدة)</h2>
+      <div class="auth-field"><label>مفتاح الإعداد (ADMIN_SETUP_KEY)</label><input type="text" id="setup-key"></div>
+      <div class="auth-field"><label>الاسم</label><input type="text" id="setup-name"></div>
+      <div class="auth-field"><label>الإيميل</label><input type="email" id="setup-email"></div>
+      <div class="auth-field"><label>كلمة المرور</label><input type="password" id="setup-password"></div>
+      <button class="auth-btn" id="btn-setup">إنشاء حساب الأدمن</button>
+      <div class="auth-links"><a data-goto="login">رجوع</a></div>
+      <div class="auth-msg" id="msg-setup"></div>
+    </div>
+
+    <div class="auth-links" style="margin-top:18px;border-top:1px solid #E4DFD3;padding-top:12px;">
+      <a data-goto="setup" style="color:#3E5468;">إعداد أول أدمن (لأول مرة بس)</a>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MAIN APP (after login) ============ -->
+<div id="appScreen" style="display:none;">
+<div class="topbar">
+  <div class="who">مسجل دخول: <b id="whoName"></b> <span class="badge" id="whoRole"></span></div>
+  <button id="btn-logout">تسجيل خروج</button>
+</div>
+
+<div class="admin-toggle" id="adminToggleWrap" style="display:none;">
+  <button id="btn-toggle-admin">إدارة المستخدمين ⚙</button>
+</div>
+
+<div id="adminPanel">
+  <div class="admin-block">
+    <h3>طلبات في انتظار الموافقة</h3>
+    <div id="pendingList"><div class="admin-empty">جاري التحميل...</div></div>
+  </div>
+  <div class="admin-block">
+    <h3>كل المستخدمين</h3>
+    <div id="allUsersList"><div class="admin-empty">جاري التحميل...</div></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">Pre-Submission Claims Audit</div>
+      <h1>مراجعة المطالبات قبل الرفع</h1>
+      <div class="sub">ارفع ملف Eclaim وملف Eclaim form filter الشهريين، وهيتحلل تلقائيًا على الفلاتر الثلاثة.</div>
+    </div>
+    <div class="stamp" id="clock"></div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="num">1</span> رفع الملفات الشهرية</h2>
+    <div class="upload-grid">
+      <div class="dropzone" id="dz-eclaim">
+        <div class="label">Eclaim.xlsx</div>
+        <div class="hint">بيانات المطالبات (شيت Command)</div>
+        <div class="fname" id="fname-eclaim">لسه متحطش ملف</div>
+        <input type="file" id="file-eclaim" accept=".xlsx,.xls">
+      </div>
+      <div class="dropzone" id="dz-filter">
+        <div class="label">Eclaim_form_filter.xlsx</div>
+        <div class="hint">principal DX · Not-Covered · الاضافة الي المطالبة</div>
+        <div class="fname" id="fname-filter">لسه متحطش ملف</div>
+        <input type="file" id="file-filter" accept=".xlsx,.xls">
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="runBtn" disabled>شغّل التحليل</button>
+  </div>
+  <div class="status" id="statusMsg"></div>
+
+  <div id="results" style="display:none;">
+    <div class="summary">
+      <div class="stat f1"><div class="n" id="cnt1">0</div><div class="l">Wrong Principal DX</div></div>
+      <div class="stat f2"><div class="n" id="cnt2">0</div><div class="l">Not-Covered Diagnosis</div></div>
+      <div class="stat f3"><div class="n" id="cnt3">0</div><div class="l">تشخيصات مقترح إضافتها</div></div>
+      <div class="stat"><div class="n" id="cntTotal">0</div><div class="l">إجمالي سطور المطالبات</div></div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="t1">1 · Wrong Principal DX</div>
+      <div class="tab" data-tab="t2">2 · Not-Covered</div>
+      <div class="tab" data-tab="t3">3 · إضافة تشخيصات</div>
+    </div>
+
+    <div class="tabpanel active" id="t1">
+      <div class="desc">مطالبات فيها <b>DIAGNOSIS1</b> (التشخيص الرئيسي) مطابق لكود موجود في شيت <b>principal DX</b>، يعني كود مش مسموح يكون تشخيص رئيسي.</div>
+      <div class="rowcount"><span id="rc1"></span><button class="btn small ghost" id="dl1">⬇ تحميل Excel</button></div>
+      <div class="tbl-wrap" id="tbl1"></div>
+    </div>
+    <div class="tabpanel" id="t2">
+      <div class="desc">مطالبات فيها أي كود من التشخيصات العشرة (DIAGNOSIS1-10) مطابق لكود في شيت <b>Not -Covered</b> (تشخيصات غير مغطاة تأمينيًا).</div>
+      <div class="rowcount"><span id="rc2"></span><button class="btn small ghost" id="dl2">⬇ تحميل Excel</button></div>
+      <div class="tbl-wrap" id="tbl2"></div>
+    </div>
+    <div class="tabpanel" id="t3">
+      <div class="desc">خدمات/أدوية بالمطالبة موجودة في شيت <b>الاضافة الي المطالبة</b>، وكود ICD10 المطلوب لقبولها مش موجود ضمن التشخيصات العشرة. <b>سطر واحد لكل مريض (PATIENTNO)</b> بكل الأكواد المطلوب إضافتها مجمّعة في أعمدة ADD1 لغاية ADD10 (كود فقط بدون وصف، بدون تكرار).</div>
+      <div class="rowcount"><span id="rc3"></span><button class="btn small ghost" id="dl3">⬇ تحميل Excel</button></div>
+      <div class="tbl-wrap" id="tbl3"></div>
+    </div>
+  </div>
+
+  <footer>Claims Pre-Audit Tool — كل المعالجة بتتم محليًا في المتصفح، الملفات مش بترفع لأي سيرفر.</footer>
+</div>
+</div><!-- /appScreen -->
+
+<script>
+/* ============================================================
+   AUTH — يتصل بـ Google Apps Script Web App
+   حط رابط الـ Web App بتاعك هنا بعد الـ Deploy
+   ============================================================ */
+const APPS_SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+
+function apiCall(action, payload){
+  payload = payload || {};
+  payload.action = action;
+  return fetch(APPS_SCRIPT_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" }, // يمنع preflight CORS مع Apps Script
+    body: JSON.stringify(payload)
+  }).then(r => r.json());
+}
+
+function showAuthMsg(id, text, isErr){
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "auth-msg show" + (isErr ? " err" : "");
+}
+
+document.querySelectorAll('[data-goto]').forEach(a => {
+  a.addEventListener('click', () => gotoScreen(a.dataset.goto));
+});
+function gotoScreen(name){
+  document.querySelectorAll('.auth-screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+}
+
+// ---- Register ----
+document.getElementById('btn-register').addEventListener('click', () => {
+  const name = document.getElementById('reg-name').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if(!APPS_SCRIPT_URL.startsWith('http')) return showAuthMsg('msg-register','لسه محطوطش رابط Apps Script في الكود',true);
+  if(!name||!email||!password) return showAuthMsg('msg-register','املا كل الحقول',true);
+  apiCall('register',{name,email,password}).then(res => {
+    showAuthMsg('msg-register', res.ok ? res.message : res.error, !res.ok);
+    if(res.ok){
+      document.getElementById('verify-email').value = email;
+      setTimeout(()=>gotoScreen('verify'), 900);
+    }
+  }).catch(()=>showAuthMsg('msg-register','في مشكلة في الاتصال بالسيرفر',true));
+});
+
+// ---- Verify email ----
+document.getElementById('btn-verify').addEventListener('click', () => {
+  const email = document.getElementById('verify-email').value.trim();
+  const code = document.getElementById('verify-code').value.trim();
+  apiCall('verifyEmail',{email,code}).then(res => {
+    showAuthMsg('msg-verify', res.ok ? res.message : res.error, !res.ok);
+    if(res.ok) setTimeout(()=>gotoScreen('login'), 1200);
+  }).catch(()=>showAuthMsg('msg-verify','في مشكلة في الاتصال بالسيرفر',true));
+});
+
+// ---- Login ----
+document.getElementById('btn-login').addEventListener('click', () => {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!APPS_SCRIPT_URL.startsWith('http')) return showAuthMsg('msg-login','لسه محطوطش رابط Apps Script في الكود',true);
+  apiCall('login',{email,password}).then(res => {
+    if(res.ok){
+      localStorage.setItem('ca_token', res.token);
+      localStorage.setItem('ca_role', res.role);
+      localStorage.setItem('ca_name', res.name);
+      localStorage.setItem('ca_email', res.email);
+      enterApp();
+    } else {
+      showAuthMsg('msg-login', res.error, true);
+    }
+  }).catch(()=>showAuthMsg('msg-login','في مشكلة في الاتصال بالسيرفر',true));
+});
+
+// ---- Forgot / Reset ----
+document.getElementById('btn-forgot').addEventListener('click', () => {
+  const email = document.getElementById('forgot-email').value.trim();
+  apiCall('forgotPassword',{email}).then(res => {
+    showAuthMsg('msg-forgot', res.ok ? res.message : res.error, !res.ok);
+    if(res.ok) document.getElementById('reset-email').value = email;
+  }).catch(()=>showAuthMsg('msg-forgot','في مشكلة في الاتصال بالسيرفر',true));
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  const email = document.getElementById('reset-email').value.trim();
+  const code = document.getElementById('reset-code').value.trim();
+  const newPassword = document.getElementById('reset-password').value;
+  apiCall('resetPassword',{email,code,newPassword}).then(res => {
+    showAuthMsg('msg-reset', res.ok ? res.message : res.error, !res.ok);
+    if(res.ok) setTimeout(()=>gotoScreen('login'), 1200);
+  }).catch(()=>showAuthMsg('msg-reset','في مشكلة في الاتصال بالسيرفر',true));
+});
+
+// ---- First admin setup ----
+document.getElementById('btn-setup').addEventListener('click', () => {
+  const setupKey = document.getElementById('setup-key').value.trim();
+  const name = document.getElementById('setup-name').value.trim();
+  const email = document.getElementById('setup-email').value.trim();
+  const password = document.getElementById('setup-password').value;
+  apiCall('setupFirstAdmin',{setupKey,name,email,password}).then(res => {
+    showAuthMsg('msg-setup', res.ok ? res.message : res.error, !res.ok);
+    if(res.ok) setTimeout(()=>gotoScreen('login'), 1500);
+  }).catch(()=>showAuthMsg('msg-setup','في مشكلة في الاتصال بالسيرفر',true));
+});
+
+// ---- Logout ----
+document.getElementById('btn-logout').addEventListener('click', () => {
+  localStorage.removeItem('ca_token');
+  localStorage.removeItem('ca_role');
+  localStorage.removeItem('ca_name');
+  localStorage.removeItem('ca_email');
+  document.getElementById('appScreen').style.display = 'none';
+  document.getElementById('authWrap').style.display = 'flex';
+  gotoScreen('login');
+});
+
+// ---- Enter app after successful login / existing session ----
+function enterApp(){
+  document.getElementById('authWrap').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('whoName').textContent = localStorage.getItem('ca_name') || '';
+  const role = localStorage.getItem('ca_role');
+  document.getElementById('whoRole').textContent = role === 'admin' ? 'ADMIN' : 'USER';
+  if(role === 'admin'){
+    document.getElementById('adminToggleWrap').style.display = 'block';
+  }
+}
+
+// ---- Admin panel ----
+document.getElementById('btn-toggle-admin').addEventListener('click', () => {
+  const panel = document.getElementById('adminPanel');
+  const btn = document.getElementById('btn-toggle-admin');
+  panel.classList.toggle('show');
+  btn.classList.toggle('active');
+  if(panel.classList.contains('show')) loadAdminData();
+});
+
+function loadAdminData(){
+  const token = localStorage.getItem('ca_token');
+  apiCall('listPending',{token}).then(res => {
+    const el = document.getElementById('pendingList');
+    if(!res.ok){ el.innerHTML = '<div class="admin-empty">'+res.error+'</div>'; return; }
+    if(!res.users.length){ el.innerHTML = '<div class="admin-empty">مفيش طلبات في الانتظار</div>'; return; }
+    el.innerHTML = res.users.map(u => `
+      <div class="admin-row">
+        <div><b>${u.name}</b> <span class="meta">${u.email}</span></div>
+        <div class="btns">
+          <button class="approve" data-email="${u.email}" data-act="approveUser">قبول</button>
+          <button class="reject" data-email="${u.email}" data-act="rejectUser">رفض</button>
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('button').forEach(b => b.addEventListener('click', adminAction));
+  });
+
+  apiCall('listUsers',{token}).then(res => {
+    const el = document.getElementById('allUsersList');
+    if(!res.ok){ el.innerHTML = '<div class="admin-empty">'+res.error+'</div>'; return; }
+    el.innerHTML = res.users.map(u => `
+      <div class="admin-row">
+        <div><b>${u.name}</b> <span class="meta">${u.email} · ${u.role}</span></div>
+        <div class="btns">
+          <span class="status-tag">${u.status}</span>
+          ${u.status === 'active' ? `<button class="reject" data-email="${u.email}" data-act="disableUser">تعطيل</button>` : ''}
+          ${u.status === 'disabled' ? `<button class="approve" data-email="${u.email}" data-act="enableUser">تفعيل</button>` : ''}
+        </div>
+      </div>`).join('');
+    el.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', adminAction));
+  });
+}
+
+function adminAction(e){
+  const email = e.target.dataset.email;
+  const act = e.target.dataset.act;
+  const token = localStorage.getItem('ca_token');
+  apiCall(act, {token, email}).then(res => {
+    if(!res.ok) alert(res.error);
+    loadAdminData();
+  });
+}
+
+// ---- Boot: check existing session ----
+(function boot(){
+  const token = localStorage.getItem('ca_token');
+  if(!token){ return; }
+  apiCall('validateSession',{token}).then(res => {
+    if(res.ok) enterApp();
+    else { localStorage.clear(); }
+  }).catch(()=>{});
+})();
+</script>
+
+<script>
+const DIAG_COLS = ["DIAGNOSIS1","DIAGNOSIS2","DIAGNOSIS3","DIAGNOSIS4","DIAGNOSIS5","DIAGNOSIS6","DIAGNOSIS7","DIAGNOSIS8","DIAGNOSIS9","DIAGNOSIS10"];
+const DIAG_DESC_COLS = ["DIAGNOSISDESCRIPTION1","DIAGNOSISDESCRIPTION2","DIAGNOSISDESCRIPTION3","DIAGNOSISDESCRIPTION4","DIAGNOSISDESCRIPTION5","DIAGNOSISDESCRIPTION6","DIAGNOSISDESCRIPTION7","DIAGNOSISDESCRIPTION8","DIAGNOSISDESCRIPTION9","DIAGNOSISDESCRIPTION10"];
+
+let eclaimWB = null, filterWB = null;
+let results = {f1:[], f2:[], f3:[]};
+
+function norm(v){
+  if(v === null || v === undefined) return "";
+  return String(v).trim().toUpperCase().replace(/\s+/g," ");
+}
+function normText(v){
+  if(v === null || v === undefined) return "";
+  return String(v).trim().toUpperCase().replace(/\s+/g," ").replace(/[.,]/g,"");
+}
+
+function setClock(){
+  document.getElementById('clock').textContent = "Session · " + new Date().toLocaleString('en-GB');
+}
+setClock();
+
+function findSheetByHeaderKeyword(wb, mustHaveHeader){
+  for(const name of wb.SheetNames){
+    const ws = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+    if(!rows.length) continue;
+    const headerRow = rows[0].map(h => norm(h));
+    if(mustHaveHeader.every(h => headerRow.includes(norm(h)))){
+      return {name, ws};
+    }
+  }
+  return null;
+}
+
+function sheetToObjects(ws){
+  return XLSX.utils.sheet_to_json(ws, {defval:null, raw:true});
+}
+
+function setupUpload(dzId, inputId, fnameId, onLoaded){
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+  const fname = document.getElementById(fnameId);
+  dz.addEventListener('click', () => input.click());
+  dz.addEventListener('dragover', e => {e.preventDefault(); dz.classList.add('drag');});
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    if(e.dataTransfer.files.length){ input.files = e.dataTransfer.files; handleFile(); }
+  });
+  input.addEventListener('change', handleFile);
+
+  function handleFile(){
+    const file = input.files[0];
+    if(!file) return;
+    fname.textContent = "بيتم القراءة...";
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:false});
+        fname.textContent = file.name;
+        dz.classList.add('ok');
+        onLoaded(wb);
+        checkReady();
+      }catch(err){
+        fname.textContent = "خطأ في قراءة الملف: " + err.message;
+        dz.classList.remove('ok');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+setupUpload('dz-eclaim','file-eclaim','fname-eclaim', wb => { eclaimWB = wb; });
+setupUpload('dz-filter','file-filter','fname-filter', wb => { filterWB = wb; });
+
+function checkReady(){
+  document.getElementById('runBtn').disabled = !(eclaimWB && filterWB);
+}
+
+document.getElementById('runBtn').addEventListener('click', runAnalysis);
+
+function setStatus(msg, isErr){
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+
+function runAnalysis(){
+  setStatus("جاري التحليل...");
+  document.getElementById('results').style.display = 'none';
+  try{
+    // 1. locate Eclaim data sheet
+    const eclaimSheet = findSheetByHeaderKeyword(eclaimWB, ["WF_TR_NO","SERVICEDATE","PATIENTNO","DIAGNOSIS1"]);
+    if(!eclaimSheet) throw new Error("مش لاقي شيت في ملف Eclaim فيه الأعمدة WF_TR_NO / SERVICEDATE / PATIENTNO / DIAGNOSIS1");
+    const claims = sheetToObjects(eclaimSheet.ws);
+
+    // 2. locate filter sheets
+    const principalSheet = findSheetByHeaderKeyword(filterWB, ["ICD_CD"]);
+    const notCoveredSheet = filterWB.SheetNames
+      .map(n => ({name:n, ws:filterWB.Sheets[n]}))
+      .find(s => norm(s.name).includes("COVER"));
+    const additionSheet = findSheetByHeaderKeyword(filterWB, ["PROCEDUREDESCRIPTION","ADD1"]);
+
+    if(!principalSheet) throw new Error("مش لاقي شيت 'principal DX' في ملف Eclaim form filter");
+    if(!notCoveredSheet) throw new Error("مش لاقي شيت 'Not -Covered' في ملف Eclaim form filter");
+    if(!additionSheet) throw new Error("مش لاقي شيت 'الاضافة الي المطالبة' في ملف Eclaim form filter");
+
+    // principal DX set — first sheet may have multiple columns but spec says single ICD_CD column
+    const principalRows = sheetToObjects(principalSheet.ws);
+    const principalSet = new Set(principalRows.map(r => norm(r.ICD_CD)).filter(Boolean));
+
+    // not covered set (code -> description)
+    const notCoveredRows = sheetToObjects(notCoveredSheet.ws);
+    const notCoveredMap = new Map();
+    notCoveredRows.forEach(r => {
+      const code = norm(r.ICD_CD);
+      if(code) notCoveredMap.set(code, (r.DESC || "").toString().trim());
+    });
+
+    // addition sheet: procedure description -> [{code, desc}]
+    const additionRows = sheetToObjects(additionSheet.ws);
+    const additionMap = new Map(); // normText(PROCEDUREDESCRIPTION) -> array of {add, icd, add2, icd2}
+    additionRows.forEach(r => {
+      const key = normText(r.PROCEDUREDESCRIPTION);
+      if(!key) return;
+      if(!additionMap.has(key)) additionMap.set(key, []);
+      additionMap.get(key).push({
+        add1: r.ADD1 ? String(r.ADD1).trim() : "",
+        icd1: r["ICD10-1"] ? String(r["ICD10-1"]).trim() : "",
+        add2: r.ADD2 ? String(r.ADD2).trim() : "",
+        icd2: r["ICD10-2"] ? String(r["ICD10-2"]).trim() : ""
+      });
+    });
+
+    // reset results
+    results = {f1:[], f2:[], f3:[]};
+    const f3ByPatient = new Map(); // PATIENTNO -> {wf, sd, pn, codes:Set, order:[]}
+
+    claims.forEach(row => {
+      const wf = row.WF_TR_NO ?? "";
+      const sd = row.SERVICEDATE ?? "";
+      const pn = row.PATIENTNO ?? "";
+
+      // ---- Filter 1: wrong principal DX ----
+      const d1 = norm(row.DIAGNOSIS1);
+      if(d1 && principalSet.has(d1)){
+        results.f1.push({
+          "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
+          "DIAGNOSIS1": row.DIAGNOSIS1
+        });
+      }
+
+      // ---- Filter 2: not-covered diagnosis (any of the 10 columns) ----
+      DIAG_COLS.forEach((col, idx) => {
+        const code = norm(row[col]);
+        if(code && notCoveredMap.has(code)){
+          results.f2.push({
+            "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
+            "DIAGNOSIS_COLUMN": col,
+            "DIAGNOSIS_CODE": row[col]
+          });
+        }
+      });
+
+      // ---- Filter 3: suggested diagnosis additions (collected below, per patient) ----
+      const procKey = normText(row.PROCEDUREDESCRIPTION);
+      if(procKey && additionMap.has(procKey)){
+        const existingCodes = new Set(DIAG_COLS.map(c => norm(row[c])).filter(Boolean));
+        if(!f3ByPatient.has(pn)){
+          f3ByPatient.set(pn, {wf, sd, pn, codes: new Set(), order: []});
+        }
+        const bucket = f3ByPatient.get(pn);
+        additionMap.get(procKey).forEach(sugg => {
+          [sugg.add1, sugg.add2].forEach(code => {
+            if(!code) return;
+            const codeNorm = norm(code);
+            if(existingCodes.has(codeNorm)) return; // already present on this claim line
+            if(bucket.codes.has(codeNorm)) return;   // already collected for this patient
+            bucket.codes.add(codeNorm);
+            bucket.order.push(code);
+          });
+        });
+      }
+    });
+
+    // build Filter 3 output: one row per patient, ADD1..ADD10
+    f3ByPatient.forEach(bucket => {
+      if(!bucket.order.length) return;
+      const rowOut = { "WF_TR_NO": bucket.wf, "SERVICEDATE": bucket.sd, "PATIENTNO": bucket.pn };
+      for(let i = 0; i < 10; i++){
+        rowOut["ADD" + (i+1)] = bucket.order[i] || "";
+      }
+      results.f3.push(rowOut);
+    });
+
+    document.getElementById('cnt1').textContent = results.f1.length;
+    document.getElementById('cnt2').textContent = results.f2.length;
+    document.getElementById('cnt3').textContent = results.f3.length;
+    document.getElementById('cntTotal').textContent = claims.length;
+
+    renderTable('tbl1', results.f1);
+    renderTable('tbl2', results.f2);
+    renderTable('tbl3', results.f3);
+    document.getElementById('rc1').textContent = results.f1.length + " سطر متطابق";
+    document.getElementById('rc2').textContent = results.f2.length + " سطر متطابق";
+    document.getElementById('rc3').textContent = results.f3.length + " سطر متطابق";
+
+    document.getElementById('results').style.display = 'block';
+    setStatus("تم التحليل ✓ — " + claims.length + " سطر مطالبة اتفحصوا.");
+  }catch(err){
+    setStatus("خطأ: " + err.message, true);
+  }
+}
+
+function renderTable(containerId, rows){
+  const el = document.getElementById(containerId);
+  if(!rows.length){
+    el.innerHTML = '<div class="empty">مفيش نتائج مطابقة 👍</div>';
+    return;
+  }
+  const cols = Object.keys(rows[0]);
+  let html = '<table><thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>' + cols.map(c => `<td>${r[c] ?? ""}</td>`).join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+  });
+});
+
+function downloadXLSX(rows, filename){
+  if(!rows.length){ alert('مفيش بيانات للتحميل'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Result");
+  XLSX.writeFile(wb, filename);
+}
+
+document.getElementById('dl1').addEventListener('click', () => downloadXLSX(results.f1, "Filter1_Wrong_Principal_DX.xlsx"));
+document.getElementById('dl2').addEventListener('click', () => downloadXLSX(results.f2, "Filter2_Not_Covered_Diagnosis.xlsx"));
+document.getElementById('dl3').addEventListener('click', () => downloadXLSX(results.f3, "Filter3_Suggested_Additions.xlsx"));
+</script>
+</body>
+</html>
