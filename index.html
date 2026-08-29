@@ -141,8 +141,8 @@
   .status{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);text-align:center;min-height:18px;margin-top:-10px;margin-bottom:20px;}
   .status.err{color:var(--red);}
 
-  .summary{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:26px;}
-  @media(max-width:900px){.summary{grid-template-columns:repeat(3,1fr);}}
+  .summary{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:26px;}
+  @media(max-width:1000px){.summary{grid-template-columns:repeat(3,1fr);}}
   @media(max-width:560px){.summary{grid-template-columns:repeat(2,1fr);}}
   .stat{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--ink);padding:16px;}
   .stat.f1{border-top-color:var(--red);}
@@ -338,7 +338,8 @@
       <div class="stat f1"><div class="n" id="cnt1">0</div><div class="l">Wrong Principal DX</div></div>
       <div class="stat f2"><div class="n" id="cnt2">0</div><div class="l">Not-Covered Diagnosis</div></div>
       <div class="stat f3"><div class="n" id="cnt3">0</div><div class="l">تشخيصات مقترح إضافتها</div></div>
-      <div class="stat f4"><div class="n" id="cnt4">0</div><div class="l">تعارض الحرارة مع Fever</div></div>
+      <div class="stat f4"><div class="n" id="cnt4a">0</div><div class="l">Fever Dx بدون حرارة فعلية</div></div>
+      <div class="stat f4"><div class="n" id="cnt4b">0</div><div class="l">حرارة فعلية بدون Fever Dx</div></div>
       <div class="stat"><div class="n" id="cntTotal">0</div><div class="l">إجمالي سطور المطالبات</div></div>
     </div>
 
@@ -346,7 +347,8 @@
       <div class="tab active" data-tab="t1">1 · Wrong Principal DX</div>
       <div class="tab" data-tab="t2">2 · Not-Covered</div>
       <div class="tab" data-tab="t3">3 · إضافة تشخيصات</div>
-      <div class="tab" data-tab="t4">4 · Fever vs TEMP</div>
+      <div class="tab" data-tab="t4a">4 · Fever Dx بدون حرارة</div>
+      <div class="tab" data-tab="t4b">5 · حرارة بدون Fever Dx</div>
     </div>
 
     <div class="tabpanel active" id="t1">
@@ -364,10 +366,15 @@
       <div class="rowcount"><span id="rc3"></span><button class="btn small ghost" id="dl3">⬇ تحميل Excel</button></div>
       <div class="tbl-wrap" id="tbl3"></div>
     </div>
-    <div class="tabpanel" id="t4">
-      <div class="desc">فلتر على ملف <b>Eclaim</b> فقط، بيقارن كود تشخيص الحرارة (<b>R50.8 / R50.9</b>) في أي من الأعمدة العشرة مع عمود <b>TEMP</b>: (أ) تشخيص Fever مسجّل لكن الحرارة الفعلية ≤ 37، أو (ب) الحرارة > 37 من غير أي تشخيص Fever مضاف. سطر واحد لكل مطالبة/زيارة.</div>
-      <div class="rowcount"><span id="rc4"></span><button class="btn small ghost" id="dl4">⬇ تحميل Excel</button></div>
-      <div class="tbl-wrap" id="tbl4"></div>
+    <div class="tabpanel" id="t4a">
+      <div class="desc">فلتر على ملف <b>Eclaim</b> فقط: فيه كود تشخيص حمى (<b>R50.8 / R50.9</b>) مسجّل في أي من الأعمدة العشرة، لكن الحرارة الفعلية في عمود <b>TEMP</b> ≤ 37 (طبيعية). عمود DIAGNOSIS بيوضح كود/أكواد الحمى المسجّلة.</div>
+      <div class="rowcount"><span id="rc4a"></span><button class="btn small ghost" id="dl4a">⬇ تحميل Excel</button></div>
+      <div class="tbl-wrap" id="tbl4a"></div>
+    </div>
+    <div class="tabpanel" id="t4b">
+      <div class="desc">فلتر على ملف <b>Eclaim</b> فقط: الحرارة في عمود <b>TEMP</b> أكبر من 37 (فعليًا فيه حمى)، لكن مفيش أي كود تشخيص حمى (<b>R50.8 / R50.9</b>) مضاف في العشرة أعمدة. عمود DIAGNOSIS هنا بيوضح كل التشخيصات المسجّلة فعليًا بالمطالبة عشان تعرف اتسجّل ايه بدالها.</div>
+      <div class="rowcount"><span id="rc4b"></span><button class="btn small ghost" id="dl4b">⬇ تحميل Excel</button></div>
+      <div class="tbl-wrap" id="tbl4b"></div>
     </div>
   </div>
 
@@ -577,7 +584,7 @@ const FEVER_CODES = new Set(["R50.8","R50.9"]);
 const FEVER_TEMP_THRESHOLD = 37;
 
 let eclaimWB = null, filterWB = null;
-let results = {f1:[], f2:[], f3:[], f4:[]};
+let results = {f1:[], f2:[], f3:[], f4a:[], f4b:[]};
 
 function norm(v){
   if(v === null || v === undefined) return "";
@@ -715,7 +722,7 @@ function runAnalysis(){
     });
 
     // reset results
-    results = {f1:[], f2:[], f3:[], f4:[]};
+    results = {f1:[], f2:[], f3:[], f4a:[], f4b:[]};
     const f1ByPatient = new Map(); // PATIENTNO -> {wf, sd, pn, codes:Set, order:[]}
     const f2ByPatient = new Map();
     const f3ByPatient = new Map();
@@ -772,7 +779,7 @@ function runAnalysis(){
         });
       }
 
-      // ---- Filter 4: Fever diagnosis vs TEMP mismatch (Eclaim only) ----
+      // ---- Filter 4: Fever diagnosis vs TEMP mismatch (Eclaim only) — split into 2 tabs ----
       const claimKey = (wf !== "" ? ("WF:" + normKey(wf)) : ("PT:" + normKey(pn) + "|" + normKey(sd)));
       if(!f4SeenClaims.has(claimKey)){
         f4SeenClaims.add(claimKey);
@@ -781,16 +788,17 @@ function runAnalysis(){
           const feverCodesFound = DIAG_COLS.map(c => norm(row[c])).filter(c => FEVER_CODES.has(c));
           const hasFeverDx = feverCodesFound.length > 0;
           if(hasFeverDx && temp <= FEVER_TEMP_THRESHOLD){
-            results.f4.push({
+            // تاب أ: تشخيص Fever مسجّل لكن الحرارة طبيعية
+            results.f4a.push({
               "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
-              "TEMP": row.TEMP, "DIAGNOSIS": feverCodesFound.join(", "),
-              "الحالة": "تشخيص Fever مسجّل لكن الحرارة طبيعية (≤37)"
+              "TEMP": row.TEMP, "DIAGNOSIS": feverCodesFound.join(", ")
             });
           } else if(!hasFeverDx && temp > FEVER_TEMP_THRESHOLD){
-            results.f4.push({
+            // تاب ب: الحرارة مرتفعة بدون أي تشخيص Fever — نعرض كل التشخيصات المسجّلة فعليًا بدل ده
+            const allDx = DIAG_COLS.map(c => row[c]).filter(v => v !== null && v !== undefined && String(v).trim() !== "");
+            results.f4b.push({
               "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
-              "TEMP": row.TEMP, "DIAGNOSIS": "",
-              "الحالة": "الحرارة مرتفعة (>37) بدون تشخيص Fever"
+              "TEMP": row.TEMP, "DIAGNOSIS": allDx.join(", ")
             });
           }
         }
@@ -823,17 +831,20 @@ function runAnalysis(){
     document.getElementById('cnt1').textContent = results.f1.length;
     document.getElementById('cnt2').textContent = results.f2.length;
     document.getElementById('cnt3').textContent = results.f3.length;
-    document.getElementById('cnt4').textContent = results.f4.length;
+    document.getElementById('cnt4a').textContent = results.f4a.length;
+    document.getElementById('cnt4b').textContent = results.f4b.length;
     document.getElementById('cntTotal').textContent = claims.length;
 
     renderTable('tbl1', results.f1);
     renderTable('tbl2', results.f2);
     renderTable('tbl3', results.f3);
-    renderTable('tbl4', results.f4);
+    renderTable('tbl4a', results.f4a);
+    renderTable('tbl4b', results.f4b);
     document.getElementById('rc1').textContent = results.f1.length + " سطر متطابق";
     document.getElementById('rc2').textContent = results.f2.length + " سطر متطابق";
     document.getElementById('rc3').textContent = results.f3.length + " سطر متطابق";
-    document.getElementById('rc4').textContent = results.f4.length + " سطر متطابق";
+    document.getElementById('rc4a').textContent = results.f4a.length + " سطر متطابق";
+    document.getElementById('rc4b').textContent = results.f4b.length + " سطر متطابق";
 
     document.getElementById('results').style.display = 'block';
     setStatus("تم التحليل ✓ — " + claims.length + " سطر مطالبة اتفحصوا.");
@@ -877,7 +888,8 @@ function downloadXLSX(rows, filename){
 document.getElementById('dl1').addEventListener('click', () => downloadXLSX(results.f1, "Filter1_Wrong_Principal_DX.xlsx"));
 document.getElementById('dl2').addEventListener('click', () => downloadXLSX(results.f2, "Filter2_Not_Covered_Diagnosis.xlsx"));
 document.getElementById('dl3').addEventListener('click', () => downloadXLSX(results.f3, "Filter3_Suggested_Additions.xlsx"));
-document.getElementById('dl4').addEventListener('click', () => downloadXLSX(results.f4, "Filter4_Fever_Temp_Mismatch.xlsx"));
+document.getElementById('dl4a').addEventListener('click', () => downloadXLSX(results.f4a, "Filter4a_FeverDx_Without_Temp.xlsx"));
+document.getElementById('dl4b').addEventListener('click', () => downloadXLSX(results.f4b, "Filter4b_Temp_Without_FeverDx.xlsx"));
 </script>
 </body>
 </html>
