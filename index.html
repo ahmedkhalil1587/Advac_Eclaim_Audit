@@ -346,12 +346,12 @@
     </div>
 
     <div class="tabpanel active" id="t1">
-      <div class="desc">مطالبات فيها <b>DIAGNOSIS1</b> (التشخيص الرئيسي) مطابق لكود موجود في شيت <b>principal DX</b>، يعني كود مش مسموح يكون تشخيص رئيسي.</div>
+      <div class="desc">مطالبات فيها <b>DIAGNOSIS1</b> (التشخيص الرئيسي) مطابق لكود موجود في شيت <b>principal DX</b>، يعني كود مش مسموح يكون تشخيص رئيسي. <b>سطر واحد لكل مريض (PATIENTNO)</b> — لو المريض ظهر بأكتر من كود تشخيص رئيسي غلط في أكتر من مطالبة، بتتجمّع كلها في نفس الصف.</div>
       <div class="rowcount"><span id="rc1"></span><button class="btn small ghost" id="dl1">⬇ تحميل Excel</button></div>
       <div class="tbl-wrap" id="tbl1"></div>
     </div>
     <div class="tabpanel" id="t2">
-      <div class="desc">مطالبات فيها أي كود من التشخيصات العشرة (DIAGNOSIS1-10) مطابق لكود في شيت <b>Not -Covered</b> (تشخيصات غير مغطاة تأمينيًا).</div>
+      <div class="desc">مطالبات فيها أي كود من التشخيصات العشرة (DIAGNOSIS1-10) مطابق لكود في شيت <b>Not -Covered</b> (تشخيصات غير مغطاة تأمينيًا). <b>سطر واحد لكل مريض (PATIENTNO)</b> بكل الأكواد غير المغطاة مجمّعة (بدون تكرار).</div>
       <div class="rowcount"><span id="rc2"></span><button class="btn small ghost" id="dl2">⬇ تحميل Excel</button></div>
       <div class="tbl-wrap" id="tbl2"></div>
     </div>
@@ -698,31 +698,36 @@ function runAnalysis(){
 
     // reset results
     results = {f1:[], f2:[], f3:[]};
-    const f3ByPatient = new Map(); // PATIENTNO -> {wf, sd, pn, codes:Set, order:[]}
+    const f1ByPatient = new Map(); // PATIENTNO -> {wf, sd, pn, codes:Set, order:[]}
+    const f2ByPatient = new Map();
+    const f3ByPatient = new Map();
 
     claims.forEach(row => {
       const wf = row.WF_TR_NO ?? "";
       const sd = row.SERVICEDATE ?? "";
       const pn = row.PATIENTNO ?? "";
 
-      // ---- Filter 1: wrong principal DX ----
+      // ---- Filter 1: wrong principal DX (collected below, per patient) ----
       const d1 = norm(row.DIAGNOSIS1);
       if(d1 && principalSet.has(d1)){
-        results.f1.push({
-          "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
-          "DIAGNOSIS1": row.DIAGNOSIS1
-        });
+        if(!f1ByPatient.has(pn)) f1ByPatient.set(pn, {wf, sd, pn, codes: new Set(), order: []});
+        const bucket = f1ByPatient.get(pn);
+        if(!bucket.codes.has(d1)){
+          bucket.codes.add(d1);
+          bucket.order.push(row.DIAGNOSIS1);
+        }
       }
 
-      // ---- Filter 2: not-covered diagnosis (any of the 10 columns) ----
-      DIAG_COLS.forEach((col, idx) => {
+      // ---- Filter 2: not-covered diagnosis (collected below, per patient) ----
+      DIAG_COLS.forEach(col => {
         const code = norm(row[col]);
         if(code && notCoveredMap.has(code)){
-          results.f2.push({
-            "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
-            "DIAGNOSIS_COLUMN": col,
-            "DIAGNOSIS_CODE": row[col]
-          });
+          if(!f2ByPatient.has(pn)) f2ByPatient.set(pn, {wf, sd, pn, codes: new Set(), order: []});
+          const bucket = f2ByPatient.get(pn);
+          if(!bucket.codes.has(code)){
+            bucket.codes.add(code);
+            bucket.order.push(row[col]);
+          }
         }
       });
 
@@ -747,15 +752,28 @@ function runAnalysis(){
       }
     });
 
-    // build Filter 3 output: one row per patient, ADD1..ADD10
-    f3ByPatient.forEach(bucket => {
-      if(!bucket.order.length) return;
-      const rowOut = { "WF_TR_NO": bucket.wf, "SERVICEDATE": bucket.sd, "PATIENTNO": bucket.pn };
-      for(let i = 0; i < 10; i++){
-        rowOut["ADD" + (i+1)] = bucket.order[i] || "";
-      }
-      results.f3.push(rowOut);
-    });
+    // helper: turn a per-patient bucket map into one-row-per-patient output rows
+    function buildPatientRows(byPatientMap, colPrefix, maxCols){
+      const out = [];
+      byPatientMap.forEach(bucket => {
+        if(!bucket.order.length) return;
+        const rowOut = { "WF_TR_NO": bucket.wf, "SERVICEDATE": bucket.sd, "PATIENTNO": bucket.pn };
+        const n = Math.min(maxCols, Math.max(bucket.order.length, 1));
+        for(let i = 0; i < n; i++){
+          rowOut[colPrefix + (i+1)] = bucket.order[i] || "";
+        }
+        out.push(rowOut);
+      });
+      return out;
+    }
+
+    // Filter 1 & 2: size columns dynamically to the widest patient found (capped at 10)
+    const f1Max = Math.min(10, Math.max(1, ...Array.from(f1ByPatient.values()).map(b => b.order.length), 1));
+    const f2Max = Math.min(10, Math.max(1, ...Array.from(f2ByPatient.values()).map(b => b.order.length), 1));
+
+    results.f1 = buildPatientRows(f1ByPatient, "DIAGNOSIS", f1Max);
+    results.f2 = buildPatientRows(f2ByPatient, "DIAGNOSIS", f2Max);
+    results.f3 = buildPatientRows(f3ByPatient, "ADD", 10);
 
     document.getElementById('cnt1').textContent = results.f1.length;
     document.getElementById('cnt2').textContent = results.f2.length;
