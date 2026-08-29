@@ -33,6 +33,14 @@
   .auth-screen{display:none;}
   .auth-screen.active{display:block;}
 
+  .setup-gear{position:absolute;top:16px;left:16px;}
+  .setup-gear button{
+    width:30px;height:30px;border:1px solid var(--line, #E4DFD3);background:#FBFAF7;color:#3E5468;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all .15s;
+  }
+  .setup-gear button:hover{color:#0E6B63;border-color:#0E6B63;transform:rotate(35deg);}
+  .auth-card{position:relative;}
+
   /* ===== Top bar (after login) ===== */
   .topbar{display:flex;justify-content:space-between;align-items:center;max-width:1180px;margin:0 auto 6px;padding:0 0 4px;}
   .topbar .who{font-size:12.5px;color:#3E5468;font-family:"Courier New",monospace;}
@@ -79,6 +87,11 @@
   html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI","Tahoma",Arial,sans-serif;}
   body{padding:28px 20px 80px;}
   .wrap{max-width:1180px;margin:0 auto;}
+
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{flex:none;}
+  .brand-text h1{font-size:22px;margin:0 0 2px;letter-spacing:.2px;color:var(--ink);}
+  .brand-text .tagline{font-family:var(--mono);font-size:11px;color:var(--teal);text-transform:uppercase;letter-spacing:1.5px;}
 
   .masthead{
     display:flex;justify-content:space-between;align-items:flex-end;
@@ -162,6 +175,9 @@
   .rowcount{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;}
 
   footer{text-align:center;font-size:11.5px;color:var(--ink-soft);margin-top:40px;font-family:var(--mono);}
+  footer .contact{margin-top:6px;font-family:"Segoe UI","Tahoma",Arial,sans-serif;font-size:12.5px;}
+  footer .contact a{color:var(--teal);text-decoration:none;}
+  footer .contact a:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
@@ -237,8 +253,13 @@
       <div class="auth-msg" id="msg-setup"></div>
     </div>
 
-    <div class="auth-links" style="margin-top:18px;border-top:1px solid #E4DFD3;padding-top:12px;">
-      <a data-goto="setup" style="color:#3E5468;">إعداد أول أدمن (لأول مرة بس)</a>
+    <div class="setup-gear" id="setupGearWrap" title="إعداد أول أدمن">
+      <button type="button" id="btn-open-setup" aria-label="إعداد أول أدمن">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
     </div>
   </div>
 </div>
@@ -268,13 +289,24 @@
 <div class="wrap">
 
   <div class="masthead">
-    <div>
-      <div class="eyebrow">Pre-Submission Claims Audit</div>
-      <h1>مراجعة المطالبات قبل الرفع</h1>
-      <div class="sub">ارفع ملف Eclaim وملف Eclaim form filter الشهريين، وهيتحلل تلقائيًا على الفلاتر الثلاثة.</div>
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="42" height="42" viewBox="0 0 42 42" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="40" height="40" fill="#0F2333"></rect>
+          <path d="M13 9 H25 L29 13 V33 H13 Z" fill="none" stroke="#F5F2EC" stroke-width="1.6" stroke-linejoin="round"></path>
+          <path d="M25 9 V13 H29" fill="none" stroke="#F5F2EC" stroke-width="1.6" stroke-linejoin="round"></path>
+          <path d="M16.5 22.5 L19.5 25.5 L25.5 18.5" fill="none" stroke="#0E6B63" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"></path>
+          <line x1="16" y1="29" x2="24" y2="29" stroke="#F5F2EC" stroke-width="1.1" opacity="0.55"></line>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="tagline">Advac · Claims Intelligence</div>
+        <h1>مراجعة المطالبات قبل الرفع</h1>
+      </div>
     </div>
     <div class="stamp" id="clock"></div>
   </div>
+  <div class="sub" style="margin:-18px 0 26px;">ارفع ملف Eclaim وملف Eclaim form filter الشهريين، وهيتحلل تلقائيًا على الفلاتر الثلاثة.</div>
 
   <div class="panel">
     <h2><span class="num">1</span> رفع الملفات الشهرية</h2>
@@ -330,7 +362,10 @@
     </div>
   </div>
 
-  <footer>Claims Pre-Audit Tool — كل المعالجة بتتم محليًا في المتصفح، الملفات مش بترفع لأي سيرفر.</footer>
+  <footer>
+    Claims Pre-Audit Tool — كل المعالجة بتتم محليًا في المتصفح، الملفات مش بترفع لأي سيرفر.
+    <div class="contact">للتواصل والدعم: <a href="mailto:ahmedkamal1587@gmail.com">ahmedkamal1587@gmail.com</a></div>
+  </footer>
 </div>
 </div><!-- /appScreen -->
 
@@ -360,6 +395,7 @@ function showAuthMsg(id, text, isErr){
 document.querySelectorAll('[data-goto]').forEach(a => {
   a.addEventListener('click', () => gotoScreen(a.dataset.goto));
 });
+document.getElementById('btn-open-setup').addEventListener('click', () => gotoScreen('setup'));
 function gotoScreen(name){
   document.querySelectorAll('.auth-screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
