@@ -323,11 +323,24 @@
       </div>
       <div class="dropzone" id="dz-filter">
         <div class="label">Eclaim_form_filter.xlsx</div>
-        <div class="hint">principal DX · Not-Covered · الاضافة الي المطالبة</div>
+        <div class="hint">principal DX · Not-Covered · الاضافة · Trauma</div>
         <div class="fname" id="fname-filter">لسه متحطش ملف</div>
         <input type="file" id="file-filter" accept=".xlsx,.xls">
       </div>
     </div>
+  </div>
+
+  <div class="panel">
+    <h2><span class="num">2</span> المرجع الطبي (عمر / جنس) — مرة واحدة بس، بيتحفظ في المتصفح</h2>
+    <div class="upload-grid" style="grid-template-columns:1fr;">
+      <div class="dropzone" id="dz-icd10">
+        <div class="label">icd10_active_official.xlsx</div>
+        <div class="hint">هيتحفظ في المتصفح، مش محتاج ترفعه تاني كل شهر</div>
+        <div class="fname" id="fname-icd10">لسه متحطش ملف</div>
+        <input type="file" id="file-icd10" accept=".xlsx,.xls">
+      </div>
+    </div>
+    <div class="status" id="icd10Status" style="margin-top:10px;"></div>
   </div>
 
   <div class="actions">
@@ -368,7 +381,7 @@
       <div class="tbl-wrap" id="tbl2"></div>
     </div>
     <div class="tabpanel" id="t3">
-      <div class="desc">خدمات/أدوية بالمطالبة موجودة في شيت <b>الاضافة الي المطالبة</b>، وكود ICD10 المطلوب لقبولها مش موجود ضمن التشخيصات العشرة. <b>سطر واحد لكل مريض (PATIENTNO)</b> بكل الأكواد المطلوب إضافتها مجمّعة في أعمدة ADD1 لغاية ADD10 (كود فقط بدون وصف، بدون تكرار).</div>
+      <div class="desc">خدمات/أدوية بالمطالبة موجودة في شيت <b>الاضافة الي المطالبة</b>، وكود ICD10 المطلوب لقبولها مش موجود ضمن التشخيصات العشرة. <b>سطر واحد لكل مريض (PATIENTNO)</b> بكل الأكواد المطلوب إضافتها مجمّعة في أعمدة ADD1 لغاية ADD10 (كود فقط بدون وصف، بدون تكرار). بيضم كمان تلقائيًا كود الحمى <b>R50.9</b> لأي مريض من تاب "حرارة بدون Fever Dx" — ده الملف الأساسي المرشّح للرفع على HIS. عمود <b>ملاحظات التوافق الطبي</b> بيوضح أي كود من المقترحات متعارض مع عمر/جنس المريض (حسب المرجع الطبي اللي رفعته) أو تخصص الطبيب (مطابقة تقريبية بناءً على فصل الـ ICD10، محتاجة مراجعتك) — الأكواد دي متحسبش في العدّ لكن اتسيبت في مكانها عشان تراجعها بنفسك.</div>
       <div class="rowcount"><span id="rc3"></span><button class="btn small ghost" id="dl3">⬇ تحميل Excel</button></div>
       <div class="tbl-wrap" id="tbl3"></div>
     </div>
@@ -598,9 +611,136 @@ const DIAG_COLS = ["DIAGNOSIS1","DIAGNOSIS2","DIAGNOSIS3","DIAGNOSIS4","DIAGNOSI
 const DIAG_DESC_COLS = ["DIAGNOSISDESCRIPTION1","DIAGNOSISDESCRIPTION2","DIAGNOSISDESCRIPTION3","DIAGNOSISDESCRIPTION4","DIAGNOSISDESCRIPTION5","DIAGNOSISDESCRIPTION6","DIAGNOSISDESCRIPTION7","DIAGNOSISDESCRIPTION8","DIAGNOSISDESCRIPTION9","DIAGNOSISDESCRIPTION10"];
 const FEVER_CODES = new Set(["R50.8","R50.9"]);
 const FEVER_TEMP_THRESHOLD = 37;
+const FEVER_ADD_CODE = "R50.9"; // الكود الموحّد اللي بيتضاف تلقائيًا لتاب 3 لما يكون فيه حرارة بدون تشخيص Fever
 
 let eclaimWB = null, filterWB = null;
 let results = {f1:[], f2:[], f3:[], f4a:[], f4b:[], f5:[], f6:[]};
+
+// ================== المرجع الطبي (عمر/جنس) + تخصص تقريبي ==================
+const ICD10_STORAGE_KEY = "claims_audit_icd10_reference_v1";
+let icd10Map = null; // code -> [sex, agel_band, ageh_band]
+
+function loadIcd10FromStorage(){
+  try{
+    const raw = localStorage.getItem(ICD10_STORAGE_KEY);
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed;
+  }catch(e){ return null; }
+}
+
+function saveIcd10ToStorage(map, meta){
+  try{
+    localStorage.setItem(ICD10_STORAGE_KEY, JSON.stringify({map, meta}));
+    return true;
+  }catch(e){ return false; }
+}
+
+function updateIcd10Status(){
+  const el = document.getElementById('icd10Status');
+  if(icd10Map && Object.keys(icd10Map).length){
+    el.className = 'status';
+    el.textContent = `✓ المرجع الطبي محمّل (${Object.keys(icd10Map).length.toLocaleString()} كود) — محفوظ في المتصفح، مش محتاج ترفعه تاني.`;
+  } else {
+    el.className = 'status';
+    el.textContent = 'لسه معملتش رفع للمرجع الطبي — فحوصات التوافق (عمر/جنس/تخصص) هتتخطى في تاب 3 لحد ما ترفعه.';
+  }
+}
+
+// تفسير نطاقات العمر: AgeL بناخد الحد الأدنى لبدايته، AgeH بناخد الحد الأقصى لنهايته
+function ageLowYears(band){
+  if(!band) return 0;
+  const b = String(band).trim().toLowerCase();
+  if(b === 'no age limit') return 0;
+  if(b.includes('day')) return 0; // 0-6 days -> عمليًا من الميلاد
+  if(b.includes('month')){
+    const m = /^(\d+)/.exec(b);
+    return m ? parseInt(m[1],10)/12 : 0;
+  }
+  if(b.includes('year')){
+    const m = /^(\d+)/.exec(b);
+    return m ? parseInt(m[1],10) : 0;
+  }
+  return 0;
+}
+function ageHighYears(band){
+  if(!band) return Infinity;
+  const b = String(band).trim().toLowerCase();
+  if(b === 'no age limit') return Infinity;
+  if(b.includes('+')) return Infinity; // "100+ years"
+  if(b.includes('day')){
+    const m = /(\d+)\s*$/.exec(b.replace('+',''));
+    return m ? parseInt(m[1],10)/365.25 : Infinity;
+  }
+  if(b.includes('month')){
+    const m = /(\d+)\s*$/.exec(b);
+    return m ? parseInt(m[1],10)/12 : Infinity;
+  }
+  if(b.includes('year')){
+    const m = /(\d+)\s*$/.exec(b);
+    return m ? parseInt(m[1],10) : Infinity;
+  }
+  return Infinity;
+}
+
+// خريطة تقريبية: فصل كود الـ ICD10 -> التخصصات المتوافقة معاه (تقريبية وتحتاج مراجعة بشرية)
+function chapterSpecialties(code){
+  const m = /^([A-Z])(\d{2})/i.exec(String(code).trim());
+  if(!m) return null;
+  const letter = m[1].toUpperCase();
+  const num = parseInt(m[2],10);
+  if(letter === 'H' && num <= 59) return ['OPHTHALMOGIST'];
+  if(letter === 'H' && num >= 60) return ['E.N.T.'];
+  if(letter === 'K' && num <= 14) return ['DENTAL'];
+  if(letter === 'M') return ['ORTHOPEDIC','SURGICAL'];
+  if(letter === 'N' && num <= 53) return ['مسالك بولية','SURGICAL'];
+  if(letter === 'N' && num >= 70) return ['GYNAECOLOGY'];
+  if(letter === 'O') return ['GYNAECOLOGY'];
+  if(letter === 'P') return ['PAEDIATRIC'];
+  if(letter === 'Q') return ['PAEDIATRIC','SURGICAL'];
+  if(letter === 'S' || (letter === 'T' && num <= 98)) return ['SURGICAL','ORTHOPEDIC','EMERGENCY SERVICES'];
+  return null; // مفيش قيد تقريبي كفاية، نتخطى الفحص
+}
+
+function specialtyIssue(code, doctorSpecialty){
+  const allowed = chapterSpecialties(code);
+  if(!allowed) return null;
+  const spec = normText(doctorSpecialty);
+  if(!spec) return null;
+  if(spec === 'EMERGENCY SERVICES') return null; // الطوارئ بتتعامل مع أي حالة
+  const allowedNorm = allowed.map(a => normText(a));
+  if(allowedNorm.includes(spec)) return null;
+  return `التخصص (تقريبي): الكود ${code} أقرب لتخصص ${allowed.join(' / ')}، والطبيب المسجّل تخصصه "${doctorSpecialty.trim()}"`;
+}
+
+function ageGenderIssues(code, patientAge, patientGender){
+  if(!icd10Map) return [];
+  const entry = icd10Map[norm(code)];
+  if(!entry) return [];
+  const [sex, agel, ageh] = entry;
+  const issues = [];
+  if(sex && sex.toLowerCase() !== 'unisex' && patientGender){
+    const g = String(patientGender).trim().toLowerCase();
+    if(sex.toLowerCase() !== g){
+      issues.push(`الجنس: الكود ${code} مخصص لـ ${sex} والمريض ${patientGender}`);
+    }
+  }
+  if(patientAge !== null && patientAge !== undefined && !isNaN(patientAge)){
+    const lo = ageLowYears(agel), hi = ageHighYears(ageh);
+    if(patientAge < lo || patientAge > hi){
+      issues.push(`العمر: الكود ${code} مخصص لعمر (${agel} → ${ageh}) والمريض ${patientAge} سنة`);
+    }
+  }
+  return issues;
+}
+
+function checkCodeCompatibility(code, patientAge, patientGender, doctorSpecialty){
+  const msgs = ageGenderIssues(code, patientAge, patientGender);
+  const specMsg = specialtyIssue(code, doctorSpecialty);
+  if(specMsg) msgs.push(specMsg);
+  return msgs;
+}
+// ============================================================================
 
 function norm(v){
   if(v === null || v === undefined) return "";
@@ -677,6 +817,33 @@ function setupUpload(dzId, inputId, fnameId, onLoaded){
 
 setupUpload('dz-eclaim','file-eclaim','fname-eclaim', wb => { eclaimWB = wb; });
 setupUpload('dz-filter','file-filter','fname-filter', wb => { filterWB = wb; });
+setupUpload('dz-icd10','file-icd10','fname-icd10', wb => {
+  const sheet = findSheetByHeaderKeyword(wb, ["code_id","sex","AgeL","AgeH"]) ||
+                (wb.SheetNames.includes('active codes') ? {name:'active codes', ws:wb.Sheets['active codes']} : null);
+  if(!sheet){
+    document.getElementById('icd10Status').textContent = "مش لاقي شيت فيه الأعمدة code_id / sex / AgeL / AgeH في الملف ده.";
+    return;
+  }
+  const rows = sheetToObjects(sheet.ws);
+  const map = {};
+  rows.forEach(r => {
+    const code = r.code_id;
+    if(!code) return;
+    map[norm(code)] = [r.sex || "", r.AgeL || "", r.AgeH || ""];
+  });
+  icd10Map = map;
+  saveIcd10ToStorage(map, {loadedAt: new Date().toISOString(), count: Object.keys(map).length});
+  updateIcd10Status();
+});
+
+// استرجاع المرجع الطبي من كاش المتصفح لو موجود من قبل (مش محتاج رفع كل شهر)
+(function restoreIcd10Cache(){
+  const cached = loadIcd10FromStorage();
+  if(cached && cached.map){
+    icd10Map = cached.map;
+  }
+  updateIcd10Status();
+})();
 
 function checkReady(){
   document.getElementById('runBtn').disabled = !(eclaimWB && filterWB);
@@ -790,7 +957,7 @@ function runAnalysis(){
       if(procKey && additionMap.has(procKey)){
         const existingCodes = new Set(DIAG_COLS.map(c => norm(row[c])).filter(Boolean));
         if(!f3ByPatient.has(pn)){
-          f3ByPatient.set(pn, {wf, sd, pn, codes: new Set(), order: []});
+          f3ByPatient.set(pn, {wf, sd, pn, codes: new Set(), order: [], issues: []});
         }
         const bucket = f3ByPatient.get(pn);
         additionMap.get(procKey).forEach(sugg => {
@@ -801,6 +968,7 @@ function runAnalysis(){
             if(bucket.codes.has(codeNorm)) return;   // already collected for this patient
             bucket.codes.add(codeNorm);
             bucket.order.push(code);
+            bucket.issues.push(checkCodeCompatibility(code, parseFloat(row.AGE1), row.GENDER, row.DOCTORSPECIALTY));
           });
         });
       }
@@ -826,6 +994,20 @@ function runAnalysis(){
               "WF_TR_NO": wf, "SERVICEDATE": sd, "PATIENTNO": pn,
               "TEMP": row.TEMP, "DIAGNOSIS": allDx.join(", ")
             });
+
+            // ندمج اقتراح إضافة كود الحمى (R50.9) في تاب 3 كمان — عشان يبقى ضمن الملف الأساسي اللي هيترفع على HIS
+            const existingCodesForFever = new Set(DIAG_COLS.map(c => norm(row[c])).filter(Boolean));
+            if(!existingCodesForFever.has(FEVER_ADD_CODE)){
+              if(!f3ByPatient.has(pn)){
+                f3ByPatient.set(pn, {wf, sd, pn, codes: new Set(), order: [], issues: []});
+              }
+              const feverBucket = f3ByPatient.get(pn);
+              if(!feverBucket.codes.has(FEVER_ADD_CODE)){
+                feverBucket.codes.add(FEVER_ADD_CODE);
+                feverBucket.order.push(FEVER_ADD_CODE);
+                feverBucket.issues.push(checkCodeCompatibility(FEVER_ADD_CODE, parseFloat(row.AGE1), row.GENDER, row.DOCTORSPECIALTY));
+              }
+            }
           }
         }
       }
@@ -855,14 +1037,21 @@ function runAnalysis(){
     });
 
     // helper: turn a per-patient bucket map into one-row-per-patient output rows
-    function buildPatientRows(byPatientMap, colPrefix, maxCols){
+    function buildPatientRows(byPatientMap, colPrefix, maxCols, includeNotes){
       const out = [];
       byPatientMap.forEach(bucket => {
         if(!bucket.order.length) return;
         const rowOut = { "WF_TR_NO": bucket.wf, "SERVICEDATE": bucket.sd, "PATIENTNO": bucket.pn };
         const n = Math.min(maxCols, Math.max(bucket.order.length, 1));
+        const noteParts = [];
         for(let i = 0; i < n; i++){
           rowOut[colPrefix + (i+1)] = bucket.order[i] || "";
+          if(includeNotes && bucket.issues && bucket.issues[i] && bucket.issues[i].length){
+            noteParts.push(`${colPrefix}${i+1} (${bucket.order[i]}): ` + bucket.issues[i].join("؛ "));
+          }
+        }
+        if(includeNotes){
+          rowOut["ملاحظات التوافق الطبي"] = noteParts.join(" | ");
         }
         out.push(rowOut);
       });
@@ -875,7 +1064,7 @@ function runAnalysis(){
 
     results.f1 = buildPatientRows(f1ByPatient, "DIAGNOSIS", f1Max);
     results.f2 = buildPatientRows(f2ByPatient, "DIAGNOSIS", f2Max);
-    results.f3 = buildPatientRows(f3ByPatient, "ADD", 10);
+    results.f3 = buildPatientRows(f3ByPatient, "ADD", 10, true);
 
     document.getElementById('cnt1').textContent = results.f1.length;
     document.getElementById('cnt2').textContent = results.f2.length;
